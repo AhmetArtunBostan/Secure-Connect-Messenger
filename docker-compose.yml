@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    container_name: secureconnect-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+      MONGO_INITDB_DATABASE: secureconnect
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - secureconnect-network
+
+  # Redis (Optional - for session storage)
+  redis:
+    image: redis:7.2-alpine
+    container_name: secureconnect-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - secureconnect-network
+
+  # Backend API
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: secureconnect-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      MONGODB_URI: mongodb://admin:password123@mongodb:27017/secureconnect?authSource=admin
+      JWT_SECRET: your-super-secret-jwt-key-change-this-in-production
+      JWT_EXPIRES_IN: 7d
+      ENCRYPTION_KEY: your-32-character-encryption-key!!
+      CORS_ORIGIN: http://localhost:3000
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./uploads:/app/uploads
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - secureconnect-network
+
+  # Frontend (for production)
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: secureconnect-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - secureconnect-network
+
+volumes:
+  mongodb_data:
+  redis_data:
+
+networks:
+  secureconnect-network:
+    driver: bridge
